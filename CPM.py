@@ -1,152 +1,74 @@
 import tkinter as tk
 import networkx as nx
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from criticalpath import Node
 
-nodos = []  # Lista para almacenar los nodos
-grafo = nx.DiGraph()  # Grafo dirigido
-critical_path = []  # Variable para almacenar la ruta crítica
-ruta_critica_valor = 0  # Valor de la ruta crítica
+class ProyectoApp:
+    def __init__(self, master):
+        self.master = master
+        self.master.title("Metodo CPM")
+        self.master.geometry("500x500")
 
-def agregar_nodo(entry_nodo, entry_duracion, entry_predecesores, lista_nodos):
-    nodo = entry_nodo.get()
-    duracion = int(entry_duracion.get())
-    predecesores = entry_predecesores.get().split(',') if entry_predecesores.get() else []  # Obtener predecesores como una lista separada por comas
+        self.tareas_label = tk.Label(master, text="Ingrese las tareas y sus duraciones (Formato: Nombre:Duracion):")
+        self.tareas_label.pack()
 
-    nodos.append((nodo, duracion, predecesores))
-    entry_nodo.delete(0, tk.END)
-    entry_duracion.delete(0, tk.END)
-    entry_predecesores.delete(0, tk.END)
-    mostrar_nodos(lista_nodos)
+        self.tareas_entry = tk.Text(master, height=10, width=30)
+        self.tareas_entry.insert(tk.END, 'A:4\nB:2\nC:3\nD:1\nE:5')
+        self.tareas_entry.pack()
 
-def generar_grafo():
-    global critical_path, ruta_critica_valor
-    grafo.clear()
-    grafo.add_nodes_from([nodo[0] for nodo in nodos])
+        self.dependencias_label = tk.Label(master, text="Ingrese las dependencias (Formato: Fuente-Destino):")
+        self.dependencias_label.pack()
 
-    for nodo, _, predecesores in nodos:
-        for predecesor in predecesores:
-            grafo.add_edge(predecesor.strip(), nodo.strip())
+        self.dependencias_entry = tk.Text(master, height=10, width=30)
+        self.dependencias_entry.insert(tk.END, 'A-B\nA-C\nA-D\nB-E\nC-E')
+        self.dependencias_entry.pack()
 
-    critical_path = calcular_ruta_critica()
-    dibujar_grafo()
-    mostrar_valor_ruta_critica()
+        self.calcular_button = tk.Button(master, text="Calcular", command=self.calcular_proyecto)
+        self.calcular_button.pack()
 
-def calcular_ruta_critica():
-    for nodo in grafo.nodes():
-        grafo.nodes[nodo]['duracion'] = 0
+    def calcular_proyecto(self):
+        tareas_input = self.tareas_entry.get("1.0", tk.END).strip().split('\n')
+        dependencias_input = self.dependencias_entry.get("1.0", tk.END).strip().split('\n')
 
-    calcular_ruta = True
-    while calcular_ruta:
-        calcular_ruta = False
-        for nodo in nodos:
-            nodo_id, duracion, predecesores = nodo
-            if not predecesores:
-                grafo.nodes[nodo_id]['duracion'] = duracion
-            else:
-                max_duration = max([grafo.nodes[pred].get('duracion', 0) for pred in predecesores])
-                if grafo.nodes[nodo_id].get('duracion', 0) != max_duration + duracion:
-                    grafo.nodes[nodo_id]['duracion'] = max_duration + duracion
-                    calcular_ruta = True
+        tareas = [task.split(':') for task in tareas_input]
+        tareas = [(name, {"duracion": int(duration)}) for name, duration in tareas]
 
-    critical_path = nx.dag_longest_path(grafo)
-    return critical_path
+        dependencias = [dep.split('-') for dep in dependencias_input]
+        dependencias = [(source, target) for source, target in dependencias]
 
-def mostrar_nodos(lista_nodos):
-    lista_nodos.delete(0, tk.END)
-    for nodo, duracion, predecesores in nodos:
-        lista_nodos.insert(tk.END, f"Nodo: {nodo}, Duración: {duracion}, Predecesores: {', '.join(predecesores)}")
+        p = Node('proyecto')
 
-def mostrar_valor_ruta_critica():
-    global ruta_critica_valor
-    ruta_critica_valor = sum([nodo[1] for nodo in nodos if nodo[0] in critical_path])
-    dibujar_grafo()
+        G = nx.DiGraph()
 
-def dibujar_grafo():
-    global label_ruta_critica, ruta_critica_valor
-    plt.figure(figsize=(8, 6))
+        for i in tareas:
+            p.add(Node(i[0], duration=i[1]["duracion"]))
+            G.add_node(i[0], duration=i[1]["duracion"])
 
-    pos = nx.spring_layout(grafo)
-    node_colors = ['skyblue' if node not in critical_path else 'red' for node in grafo.nodes()]
+        for j in dependencias:
+            p.link(j[0], j[1])
+            G.add_edge(j[0], j[1])
 
-    nx.draw(grafo, pos, with_labels=True, node_size=800, node_color=node_colors, font_weight='bold', arrows=True)
-    plt.title("Grafo de Nodos y Predecesores")
-    plt.axis('off')
+        p.update_all()
 
-    if 'canvas' in globals():
-        canvas.get_tk_widget().pack_forget()  # Eliminar canvas anterior si existe
+        critical_path = p.get_critical_path()
+        duration = p.duration
 
-    fig = plt.gcf()
-    canvas = FigureCanvasTkAgg(fig, master=frame_grafo)
-    canvas.draw()
-    canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+        result_window = tk.Toplevel(self.master)
+        result_window.title("Resultados")
 
-    # Recalcular el valor de la ruta crítica
-    ruta_critica_valor = sum([nodo[1] for nodo in nodos if nodo[0] in critical_path])
+        result_label = tk.Label(result_window, text=f"Ruta Crítica: {critical_path}\nDuración del proyecto: {duration}", height=10, width=50)
+        result_label.pack()
 
-    # Obtener la posición del último nodo en la ruta crítica
-    if critical_path:
-        last_node = critical_path[-1]
-        x, y = pos[last_node]
+        # Visualizar el grafo
+        self.mostrar_grafo(G)
 
-        # Mostrar el valor de la ruta crítica en el último nodo de la ruta
-        plt.text(x, y - 0.1, f"Valor de la ruta crítica: {ruta_critica_valor}", fontsize=10, ha='center', bbox=dict(facecolor='white', alpha=0.8))
-
-    if 'label_ruta_critica' in globals():
-        label_ruta_critica.destroy()
-
-    label_ruta_critica = tk.Label(ventana_cpm, text=f"Valor de la ruta crítica: {ruta_critica_valor}", font=("Arial", 12))
-    label_ruta_critica.pack()
-
-def reset_variables():
-    global nodos, grafo, critical_path, ruta_critica_valor
-    nodos = []
-    grafo = nx.DiGraph()
-    critical_path = []
-    ruta_critica_valor = 0
-    ventana_cpm.destroy()  # Cierra la ventana de CPM
+    def mostrar_grafo(self, G):
+        pos = nx.spring_layout(G)
+        nx.draw(G, pos, with_labels=True, node_size=700, node_color='skyblue', font_size=8)
+        plt.title('Grafo del Proyecto')
+        plt.show()
 
 def ventana_cpm():
-    global ventana_cpm  # Esto se utiliza para que la variable sea global y pueda ser accedida en otros lugares
-    ventana_cpm = tk.Tk()  # Crear una nueva ventana, en lugar de utilizar Toplevel
-    ventana_cpm.title("Datos para CPM")
-    ventana_cpm.geometry("800x600")
-
-    label_nodo = tk.Label(ventana_cpm, text="Nodo:")
-    label_nodo.pack()
-
-    entry_nodo = tk.Entry(ventana_cpm)
-    entry_nodo.pack()
-
-    label_duracion = tk.Label(ventana_cpm, text="Duración:")
-    label_duracion.pack()
-
-    entry_duracion = tk.Entry(ventana_cpm)
-    entry_duracion.pack()
-
-    label_predecesores = tk.Label(ventana_cpm, text="Predecesores (separados por coma):")
-    label_predecesores.pack()
-
-    entry_predecesores = tk.Entry(ventana_cpm)
-    entry_predecesores.pack()
-
-    lista_nodos = tk.Listbox(ventana_cpm)
-    lista_nodos.pack()
-
-    boton_agregar = tk.Button(ventana_cpm, text="Agregar Nodo", command=lambda: agregar_nodo(entry_nodo, entry_duracion, entry_predecesores, lista_nodos))
-    boton_agregar.pack()
-
-    boton_generar_grafo = tk.Button(ventana_cpm, text="Generar Grafo", command=generar_grafo)
-    boton_generar_grafo.pack()
-
-    boton_salir = tk.Button(ventana_cpm, text="Salir", command=reset_variables)
-    boton_salir.pack()
-
-    global frame_grafo
-    frame_grafo = tk.Frame(ventana_cpm)
-    frame_grafo.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
-
-def mostrar_valor_ruta_critica():
-    global ruta_critica_valor
-    ruta_critica_valor = sum([nodo[1] for nodo in nodos if nodo[0] in critical_path])
-    dibujar_grafo()
+    root = tk.Tk()
+    app = ProyectoApp(root)
+    root.mainloop()
