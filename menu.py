@@ -42,6 +42,7 @@ ventana = tk.Tk()
 ventana.title("Menú de Modelos de Investigación Operativa II")
 ventana.geometry("600x700")
 ventana.configure(bg='#E0E0E0')  # Cambia el color de fondo de la ventana
+ventana.geometry("500x500")
 
 # Estilo para los botones
 estilo_boton = {
